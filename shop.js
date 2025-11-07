@@ -4,22 +4,62 @@ const PRODUCTS = {
   lemon: { name: "Lemon", emoji: "🍋" },
 };
 
+function normalizeBasketItems(items) {
+  if (!Array.isArray(items) || items.length === 0) return [];
+
+  const asStrings = items.every((item) => typeof item === "string");
+  if (asStrings) {
+    return items.reduce((acc, product) => {
+      if (typeof product !== "string") return acc;
+      const existing = acc.find((entry) => entry.product === product);
+      if (existing) {
+        existing.quantity += 1;
+      } else {
+        acc.push({ product, quantity: 1 });
+      }
+      return acc;
+    }, []);
+  }
+
+  return items
+    .filter(
+      (item) =>
+        item &&
+        typeof item.product === "string" &&
+        Number.isFinite(item.quantity) &&
+        item.quantity > 0
+    )
+    .map((item) => ({
+      product: item.product,
+      quantity: Math.floor(item.quantity),
+    }));
+}
+
 function getBasket() {
   try {
     const basket = localStorage.getItem("basket");
     if (!basket) return [];
     const parsed = JSON.parse(basket);
-    return Array.isArray(parsed) ? parsed : [];
+    return normalizeBasketItems(parsed);
   } catch (error) {
     console.warn("Error parsing basket from localStorage:", error);
     return [];
   }
 }
 
+function saveBasket(basket) {
+  localStorage.setItem("basket", JSON.stringify(basket));
+}
+
 function addToBasket(product) {
   const basket = getBasket();
-  basket.push(product);
-  localStorage.setItem("basket", JSON.stringify(basket));
+  const existing = basket.find((item) => item.product === product);
+  if (existing) {
+    existing.quantity += 1;
+  } else {
+    basket.push({ product, quantity: 1 });
+  }
+  saveBasket(basket);
 }
 
 function clearBasket() {
@@ -37,11 +77,11 @@ function renderBasket() {
     if (cartButtonsRow) cartButtonsRow.style.display = "none";
     return;
   }
-  basket.forEach((product) => {
+  basket.forEach(({ product, quantity }) => {
     const item = PRODUCTS[product];
     if (item) {
       const li = document.createElement("li");
-      li.innerHTML = `<span class='basket-emoji'>${item.emoji}</span> <span>${item.name}</span>`;
+      li.innerHTML = `<span class='basket-emoji'>${item.emoji}</span> <span>${quantity}x ${item.name}</span>`;
       basketList.appendChild(li);
     }
   });
@@ -58,8 +98,9 @@ function renderBasketIndicator() {
     indicator.className = "basket-indicator";
     basketLink.appendChild(indicator);
   }
-  if (basket.length > 0) {
-    indicator.textContent = basket.length;
+  const totalQuantity = basket.reduce((sum, item) => sum + item.quantity, 0);
+  if (totalQuantity > 0) {
+    indicator.textContent = totalQuantity;
     indicator.style.display = "flex";
   } else {
     indicator.style.display = "none";
